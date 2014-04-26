@@ -1,0 +1,178 @@
+\documentclass[a4paper,12pt]{article}
+\title{Mocha2MV - Using reactive modules with VIS}
+\author{Sebastian Gfeller\\
+Supervisor Barbara Jobstmann}
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+The aim of Mocha2MV is to bridge the gap between two software verification
+utilities: The ones provided by Mocha and those provided by VIS (Verification
+Interacting with Synthesis). It provides a utility that translates a system
+specification in the Reactive Modules format (as accepted by jMocha) into
+BLIF-MV, a format accepted by VIS. Furthermore, an extension package allows to
+directly use Reactive Modules with VIS.
+
+\section{Architecture}
+The main conversion code was written in Java, reusing the jMocha parse
+tree (this is the only part needed, so if jMocha does not run on your
+platform, you might still get lucky). The VIS bindings are written in
+C code and are simply calling the conversion JAR, passing the output
+to VIS-internal commands.
+
+\subsection{Translation Details}
+BLIF-MV is a fairly low-level format based on models which can contain
+subcircuits, latches and input-output tables. Reactive Modules are
+composed of modules containing atoms that control variables. Both in
+Reactive Modules and in BLIF-MV, variable updates may be nondeterministic,
+but VIS only supports this in the form of additional pseudo-input variables.
+
+Here is a simple Mocha module that describes a traffic light:
+
+\begin{verbatim}
+type color is { green, orange, red }
+
+module minitraffic is
+       interface light: color;
+
+       lazy atom CtrlLight controls light reads light
+       	    init
+		[] true -> light' := green;
+	    update
+		[] light = green -> light' := orange;
+		[] light = orange -> light' := red;
+		[] light = red -> light' := green;
+\end{verbatim}
+
+This is translated to the following BLIF-MV code:
+
+\begin{verbatim}
+.model minitraffic
+# Non-deterministic pseudo-inputs
+.inputs nd0 
+.outputs light light'
+.mv light,light' 3 green orange red
+.mv nd0 2
+.latch light' light
+# CtrlLight
+.reset light
+green 
+.table nd0 light  -> light' 
+0 green orange 
+0 orange red 
+0 red green 
+1 green =light 
+1 orange =light 
+1 red =light 
+# Filling in the unused nondet combinations.
+.end
+\end{verbatim}
+
+Variables are represented by latches and the laziness of the atom is
+translated in a second update choice where the value of the latch stays
+the same. Module composition is simulated by subcircuits.
+
+\subsection{The Translation implementation}
+The translation is done in multiple steps. In a first step, all types
+are collected. Afterwards, the models are specified on the basis of the
+input modules. Finally, the input-output tables are filled by evaluating
+the guarded expressions and assignments on the set of possible inputs.
+
+While VIS allows for a more compact form, expressing multiple inputs on
+one line, this does not correspond well to the arithmetic expressivity
+of reactive modules, so no size optimization is performed. This means
+that tables can get quite large when using big range types. Usually,
+this problem can be avoided by letting atoms only read and control few
+variables.
+
+\section{Installation}
+The Mocha2MV distribution consists of two parts, a JAR and
+command line tool to translate a reactive modules specification
+into a BLIF-MV file and bindings for VIS.
+
+\subsection{Installing the command line tool}
+To build the command line tool and corresponding JAR file for
+a Unix system, type
+
+\begin{verbatim}
+% ./install.sh
+\end{verbatim}
+
+In the main directory. This launches the ANT task to compile the
+jar and places an executable (that points to this exact JAR) in
+/usr/local/bin.
+
+There are no executables provided for Windows, but you can nevertheless
+use the jar directly to convert reactive modules. For this, just launch
+the default ant task.
+
+\subsection{VIS bindings}
+The VIS bindings are a bit trickier to install. First, you'll have
+to check whether you can build VIS on your system. Let \$VIS denote
+the VIS source directory and \$MOCHA2MV the Mocha2MV source directory.
+
+\begin{enumerate}
+\item Copy the directory ``mocha'' to VIS:
+
+\begin{verbatim}
+% cp -R $MOCHA2MV/mocha $VIS/src/mocha
+\end{verbatim}
+
+\item Let VIS know of the ``read\_mocha'' command: For this, open
+\$VIS/src/vm/vm.h and add the following include in the section ``nested
+includes'' (line 50)
+
+\begin{verbatim}
+#include "mocha.h"
+\end{verbatim}
+
+\item Launch the command initialization at VIS startup: in the file
+\$VIS/src/vm/vmInit.c , add the following at the end of the function
+VmInit:
+
+\begin{verbatim}
+Mocha_Init();
+\end{verbatim}
+
+\item Add mocha to the list of packages to build in \$VIS/Makefile, line 98:
+
+\begin{verbatim}
+ALL_PKGS = ... var vm mocha
+\end{verbatim}
+
+\item Finally, make; make install in \$VIS to install the
+version with VIS.
+\end{enumerate}
+
+\section{Usage}
+After the complicated installation, the conversion can be invoked pretty
+easily. To translate and load the file 3bitcounter.rm, you would type inside
+VIS
+
+\begin{verbatim}
+vis> read_mocha ./3bitcounter.rm
+vis> init_verify
+\end{verbatim}
+
+It will sometimes occur that Mocha2MV fails to translate the input file
+correctly. Most of the time, this will fail during the table generation
+phase. The error thrown should give some indication what construct is
+missing in the translator. In the following section, some limitations
+are named.
+
+\section{Limitations}
+Mocha2MV does not yet translate all valid Reactive Module specifications. The
+following things are missing:
+
+\begin{description}
+\item[Array types and Bitvectors] Array types and bitvectors are not supported at the moment. They could,
+however easily be represented by multiple latches. Additions to the Expression
+evaluator would also be needed.
+\item[Compact sequence representations] In the same fashion, sequence types are used
+in their extended form and not in a binary representation, which would be
+much smaller.
+\item[Event atoms] While event atoms are translated, they don't produce usable output if more than one variable
+is awaited.
+\end{description}
+\end{document}

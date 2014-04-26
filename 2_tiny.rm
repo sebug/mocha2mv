@@ -1,0 +1,26 @@
+module tiny is
+external x: bool
+private  y: (0..3)
+interface z: (0..3)
+
+atom A2 controls y awaits x reads y
+init
+[] true -> y' := 0;
+update
+[] true -> y' := if (x') then y else inc y by 1 fi
+
+atom A3 controls z reads x,y,z
+init
+[] true -> z' := 3;
+update
+[] true -> z' := if (x) then inc z by 1 else y fi
+
+predicate P1 is ~(z=2)
+judgment J1 is tiny |= P1
+
+//enumerative checker
+module tiny2 is hide z in tiny
+judgment J2 is tiny2 |= P1
+
+predicate P2 is (tiny2.z=2)
+judgment J3 is tiny2 |= P2

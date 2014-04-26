@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!--
+The mocha2mv build file.
+
+Note that you'll find code from the original j-mocha 2.0 under support.
+-->
+<project name="mocha2mv" default="jar">
+	<target name="clean" description="remove intermediate files">
+		<delete dir="classes" />
+	</target>
+	<target name="compile">
+		<mkdir dir="classes" />
+		<javac srcdir="src"
+			classpath="support"
+			destdir="classes">
+			<compilerarg value="-Xlint" />
+		</javac>
+	</target>
+	
+	<target name="jar" depends="compile">
+		<jar destfile="mocha2mv.jar">
+			<fileset dir="classes" />
+			<fileset dir="support" />
+			<manifest>
+				<attribute name="Main-Class" value="translator.Mocha2MV" />
+			</manifest>
+		</jar>
+	</target>
+</project>

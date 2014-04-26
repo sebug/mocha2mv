@@ -1,0 +1,4 @@
+#!/bin/sh
+# Runs the mocha2mv jar
+#
+java -jar "/Users/sgfeller/Documents/EPFL/Cours4/Model Checking/project/mocha2mv/mocha2mv.jar" $1 $2
